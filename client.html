@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Client</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        label {
+            font-weight: bold;
+        }
+        input, select, button, textarea {
+            width: 100%;
+            margin: 10px 0;
+            padding: 10px;
+            font-size: 16px;
+        }
+        #messages {
+            height: 200px;
+            overflow-y: scroll;
+            border: 1px solid #ccc;
+            padding: 10px;
+        }
+        .message {
+            margin: 5px 0;
+            padding: 5px;
+            background-color: #f1f1f1;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>WebSocket Client</h2>
+
+        <label for="token">Token:</label>
+        <input type="text" id="token" placeholder="Enter Token">
+
+        <label for="room_id">Room ID:</label>
+        <input type="number" id="room_id" placeholder="Enter Room ID">
+
+        <label for="action">Action:</label>
+        <select id="action">
+            <option value="join">Join</option>
+            <option value="send_message">Send Message</option>
+            <option value="leave">Leave</option>
+        </select>
+
+        <label for="message">Message (optional):</label>
+        <textarea id="message" placeholder="Enter your message"></textarea>
+
+        <button id="connectBtn">Connect to WebSocket</button>
+        <button id="sendBtn" disabled>Send</button>
+
+        <h3>Messages:</h3>
+        <div id="messages"></div>
+    </div>
+</body>
+<script>
+    let socket;
+
+    document.getElementById('connectBtn').addEventListener('click', async () => {
+        const token = document.getElementById('token').value.trim();
+
+        if (!token) {
+            addMessage("Token is required to connect!");
+            return;
+        }
+
+        try {
+            // Xác thực token trước khi kết nối WebSocket
+            const response = await fetch("http://localhost:8080/wsAuth", {
+                method: "GET",
+                headers: {
+                    "Authorization": `Bearer ${token}`,
+                },
+            });
+            const text = await response.text();
+            console.log("Raw response:", text);
+            const data = JSON.parse(text); 
+            if (response.ok && data.message === "Token validated") {
+                addMessage("Authentication successful!");
+                connectWebSocket();
+            } else {
+                addMessage("Authentication failed!");
+            }
+        } catch (error) {
+            console.error("Error during authentication:", error);
+            addMessage("Error during authentication. Check console.");
+        }
+    });
+
+    function connectWebSocket() {
+        const url = `ws://localhost:8888/ws`;
+        socket = new WebSocket(url);
+
+        socket.onopen = () => {
+            console.log("WebSocket connected!");
+            document.getElementById('sendBtn').disabled = false;
+            addMessage("Connected to WebSocket server.");
+        };
+
+        socket.onmessage = (event) => {
+            addMessage("Server: " + event.data);
+        };
+
+        socket.onclose = () => {
+            console.log("WebSocket disconnected!");
+            document.getElementById('sendBtn').disabled = true;
+            addMessage("Disconnected from WebSocket server.");
+        };
+
+        socket.onerror = (error) => {
+            console.error("WebSocket error:", error);
+            addMessage("WebSocket error. Check console for details.");
+        };
+    }
+
+    document.getElementById('sendBtn').addEventListener('click', () => {
+        const roomId = document.getElementById('room_id').value;
+        const action = document.getElementById('action').value;
+        const messageContent = document.getElementById('message').value;
+
+        if (!roomId || !action) {
+            addMessage("Room ID and Action are required!");
+            return;
+        }
+
+        const message = {
+            action: action,
+            room_id: parseInt(roomId, 10),
+            message: messageContent,
+        };
+
+        socket.send(JSON.stringify(message));
+        addMessage("You: " + JSON.stringify(message));
+    });
+
+    function addMessage(msg) {
+        const messagesDiv = document.getElementById('messages');
+        const messageElem = document.createElement('div');
+        messageElem.className = "message";
+        messageElem.textContent = msg;
+        messagesDiv.appendChild(messageElem);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+</script>
+</html>
